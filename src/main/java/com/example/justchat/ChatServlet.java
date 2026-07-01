@@ -1,5 +1,8 @@
 package com.example.justchat;
 
+import com.google.genai.Client;
+import com.google.genai.types.GenerateContentConfig;
+import com.google.genai.types.GenerateContentResponse;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
@@ -26,15 +29,35 @@ public class ChatServlet extends HttpServlet {
         String message = req.getParameter("message");
         HttpSession session = req.getSession();
         List<String> chat = null;
-        try {
-            // ArrayList<String> 타입으로 다운캐스팅
+        Object chatObj = session.getAttribute("chat");
+        if (!(chatObj instanceof ArrayList)) {
+            chat = new ArrayList<>();
+        } else {
             chat = (ArrayList<String>) session.getAttribute("chat");
-        } catch (Exception e){
-            // 예외처리를 더 상세히 가져가도 괜찮음
-            chat = new ArrayList<>(); // 에러가 있으면 빈 리스트
         }
+        System.out.println("chat = " + chat);
         chat.add("나 : %s".formatted(message));
-        chat.add("%s : %s".formatted(model, message));
-        req.setAttribute("chat", chat); // -> el -> jstl(for-each)
+        //        chat.add("%s : %s".formatted(model, message));
+        String aiMessage = useAI(model, message);
+        chat.add("%s : %s".formatted(model, aiMessage));
+        session.setAttribute("chat", chat); // -> el -> jstl(for-each)
+        resp.sendRedirect("chat"); // P -> R/G
+        // Form 처리를 Post하고 나서 다시 Post 경로로 포워드를 하면
+        // 나중에 그 링크를 새로고침하거나 하면 재제출이 됨 (PRG)
+    }
+
+    private String useAI(String model, String message) {
+        String apiKey = System.getenv("GEMINI_API_KEY"); // 환경변수
+//        String apiKey = System.getenv("GOOGLE_API_KEY");
+        GenerateContentConfig config = GenerateContentConfig.builder()
+                .maxOutputTokens(128)
+                .temperature(0.7f)
+                .build();
+        try (Client client = Client.builder()
+                .apiKey(apiKey)
+                .build()) {
+            GenerateContentResponse response = client.models.generateContent(model, message, config); // 원래 준비했던 파일에 잔뜩 적혀있어요
+            return response.text();
+        }
     }
 }
